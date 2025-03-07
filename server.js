@@ -1,6 +1,7 @@
 // C:\Users\AnthonyParadiso\Desktop\grokPMApp\backend_new\server.js
 
 const express = require('express');
+const cors = require('cors');
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
@@ -12,9 +13,9 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') {
-    res.sendStatus(204); // No Content for preflight requests
+    res.sendStatus(204); // Handle preflight requests
   } else {
-    next(); // Proceed to the next middleware/route handler
+    next();
   }
 });
 
@@ -24,7 +25,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// JSON Parsing
+// Parse JSON requests
 app.use(express.json());
 
 // Database Configuration
