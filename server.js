@@ -1,21 +1,28 @@
 // C:\Users\AnthonyParadiso\Desktop\grokPMApp\backend_new\server.js
+
 const express = require('express');
-const cors = require('cors');
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
 const app = express();
 
-// CORS Configuration
-app.use(cors({
-  origin: ['http://localhost:3000', 'https://grokpmfrontend.onrender.com'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}));
-app.options('*', cors());
+// Manual CORS Configuration
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', 'https://grokpmfrontend.onrender.com');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204); // No Content for preflight requests
+  } else {
+    next(); // Proceed to the next middleware/route handler
+  }
+});
+
+// Request Logging for Debugging
+app.use((req, res, next) => {
+  console.log(`Received ${req.method} request for ${req.url} from ${req.headers.origin || 'unknown origin'}`);
+  next();
+});
 
 // JSON Parsing
 app.use(express.json());
