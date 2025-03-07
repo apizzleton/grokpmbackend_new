@@ -1,34 +1,30 @@
-// server.js
 const express = require('express');
+const cors = require('cors');
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
 // Initialize Express
 const app = express();
 
-// CORS Configuration with Environment Variable Support
-app.use((req, res, next) => {
-  const allowedOrigins = process.env.ALLOWED_ORIGINS 
-    ? process.env.ALLOWED_ORIGINS.split(',') 
-    : ['https://grokpmfrontend.onrender.com', 'http://localhost:3000'];
-  
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
-    res.setHeader('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
-  } else {
-    res.status(403).send('CORS policy: Origin not allowed');
-    return;
-  }
-  
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(204); // Handle preflight requests
-  } else {
-    next();
-  }
-});
+// CORS Configuration
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',') 
+      : ['https://grokpmfrontend.onrender.com', 'http://localhost:3000'];
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      console.log(`CORS blocked request from origin: ${origin}`);
+      callback(new Error('CORS policy: Origin not allowed'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
+app.options('*', cors());
 
 // Request Logging Middleware
 app.use((req, res, next) => {
@@ -48,7 +44,7 @@ const sequelize = new Sequelize(process.env.DB_CONNECTION_STRING, {
       rejectUnauthorized: false 
     }
   },
-  logging: false
+  logging: console.log // Enable SQL logging for debugging
 });
 
 // Define Models
@@ -195,15 +191,12 @@ Payment.belongsTo(Tenant, { foreignKey: 'tenant_id' });
 // Database Sync and Seed Function
 const syncModels = async () => {
   try {
-    // Test database connection
     await sequelize.authenticate();
     console.log('Database connection established successfully');
 
-    // Sync models with database
-    await sequelize.sync({ force: true }); // Use { force: false } in production
+    await sequelize.sync({ force: true }); // Change to { force: false } in production
     console.log('Database synced successfully');
 
-    // Seed initial data
     const [assetType, liabilityType, incomeType, expenseType] = await AccountType.bulkCreate([
       { name: 'Asset' }, 
       { name: 'Liability' }, 
@@ -329,7 +322,8 @@ const syncModels = async () => {
     console.log('Initial data seeded successfully');
     
   } catch (error) {
-    console.error('Error syncing models or seeding data:', error);
+    console.error('Failed to sync database:', error);
+    process.exit(1); // Exit if DB fails
   }
 };
 
@@ -337,211 +331,240 @@ const syncModels = async () => {
 syncModels();
 
 // API Routes
-
-// Properties
 app.get('/api/properties', async (req, res) => {
   try {
+    console.log('Fetching properties...');
     const properties = await Property.findAll({ 
       include: [Owner, Unit, Association, Transaction] 
     });
     res.json(properties);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/properties:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/properties', async (req, res) => {
   try {
+    console.log('Creating property:', req.body);
     const property = await Property.create(req.body);
     res.status(201).json(property);
   } catch (error) {
+    console.error('Error in POST /api/properties:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Units
 app.get('/api/units', async (req, res) => {
   try {
+    console.log('Fetching units...');
     const units = await Unit.findAll({ 
       include: [Property, Tenant] 
     });
     res.json(units);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/units:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/units', async (req, res) => {
   try {
+    console.log('Creating unit:', req.body);
     const unit = await Unit.create(req.body);
     res.status(201).json(unit);
   } catch (error) {
+    console.error('Error in POST /api/units:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Tenants
 app.get('/api/tenants', async (req, res) => {
   try {
+    console.log('Fetching tenants...');
     const tenants = await Tenant.findAll({ 
       include: [Unit, Payment] 
     });
     res.json(tenants);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/tenants:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/tenants', async (req, res) => {
   try {
+    console.log('Creating tenant:', req.body);
     const tenant = await Tenant.create(req.body);
     res.status(201).json(tenant);
   } catch (error) {
+    console.error('Error in POST /api/tenants:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Owners
 app.get('/api/owners', async (req, res) => {
   try {
+    console.log('Fetching owners...');
     const owners = await Owner.findAll({ 
       include: [Property] 
     });
     res.json(owners);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/owners:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/owners', async (req, res) => {
   try {
+    console.log('Creating owner:', req.body);
     const owner = await Owner.create(req.body);
     res.status(201).json(owner);
   } catch (error) {
+    console.error('Error in POST /api/owners:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Associations
 app.get('/api/associations', async (req, res) => {
   try {
+    console.log('Fetching associations...');
     const associations = await Association.findAll({ 
       include: [Property, BoardMember] 
     });
     res.json(associations);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/associations:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/associations', async (req, res) => {
   try {
+    console.log('Creating association:', req.body);
     const association = await Association.create(req.body);
     res.status(201).json(association);
   } catch (error) {
+    console.error('Error in POST /api/associations:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Board Members
 app.get('/api/board-members', async (req, res) => {
   try {
+    console.log('Fetching board members...');
     const boardMembers = await BoardMember.findAll({ 
       include: [Association] 
     });
     res.json(boardMembers);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/board-members:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/board-members', async (req, res) => {
   try {
+    console.log('Creating board member:', req.body);
     const boardMember = await BoardMember.create(req.body);
     res.status(201).json(boardMember);
   } catch (error) {
+    console.error('Error in POST /api/board-members:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Accounts
 app.get('/api/accounts', async (req, res) => {
   try {
+    console.log('Fetching accounts...');
     const accounts = await Account.findAll({ 
       include: [AccountType, Transaction] 
     });
     res.json(accounts);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/accounts:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/accounts', async (req, res) => {
   try {
+    console.log('Creating account:', req.body);
     const account = await Account.create(req.body);
     res.status(201).json(account);
   } catch (error) {
+    console.error('Error in POST /api/accounts:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Account Types
 app.get('/api/account-types', async (req, res) => {
   try {
+    console.log('Fetching account types...');
     const accountTypes = await AccountType.findAll();
     res.json(accountTypes);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/account-types:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/account-types', async (req, res) => {
   try {
+    console.log('Creating account type:', req.body);
     const accountType = await AccountType.create(req.body);
     res.status(201).json(accountType);
   } catch (error) {
+    console.error('Error in POST /api/account-types:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Transactions
 app.get('/api/transactions', async (req, res) => {
   try {
+    console.log('Fetching transactions...');
     const transactions = await Transaction.findAll({ 
       include: [Account, TransactionType, Property] 
     });
     res.json(transactions);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/transactions:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/transactions', async (req, res) => {
   try {
+    console.log('Creating transaction:', req.body);
     const transaction = await Transaction.create(req.body);
     res.status(201).json(transaction);
   } catch (error) {
+    console.error('Error in POST /api/transactions:', error);
     res.status(400).json({ error: error.message });
   }
 });
 
-// Payments
 app.get('/api/payments', async (req, res) => {
   try {
+    console.log('Fetching payments...');
     const payments = await Payment.findAll({ 
       include: [Tenant] 
     });
     res.json(payments);
   } catch (error) {
-    res.status(500).send(error.message);
+    console.error('Error in /api/payments:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/payments', async (req, res) => {
   try {
+    console.log('Creating payment:', req.body);
     const payment = await Payment.create(req.body);
     res.status(201).json(payment);
   } catch (error) {
+    console.error('Error in POST /api/payments:', error);
     res.status(400).json({ error: error.message });
   }
 });
