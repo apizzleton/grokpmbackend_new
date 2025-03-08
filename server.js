@@ -305,7 +305,7 @@ const syncModels = async () => {
         transactionTypeId: 2, 
         propertyId: prop2.id, 
         amount: 500, 
-        date: new Date(), 
+        date: New Date(), 
         description: 'Maintenance' 
       }
     ]);
@@ -565,6 +565,30 @@ app.post('/api/payments', async (req, res) => {
     res.status(201).json(payment);
   } catch (error) {
     console.error('Error in POST /api/payments:', error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// NEW: GET route for /api/transaction-types
+app.get('/api/transaction-types', async (req, res) => {
+  try {
+    console.log('Fetching transaction types...');
+    const transactionTypes = await TransactionType.findAll();
+    res.json(transactionTypes);
+  } catch (error) {
+    console.error('Error in /api/transaction-types:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// NEW: POST route for /api/transaction-types (optional, for completeness)
+app.post('/api/transaction-types', async (req, res) => {
+  try {
+    console.log('Creating transaction type:', req.body);
+    const transactionType = await TransactionType.create(req.body);
+    res.status(201).json(transactionType);
+  } catch (error) {
+    console.error('Error in POST /api/transaction-types:', error);
     res.status(400).json({ error: error.message });
   }
 });
