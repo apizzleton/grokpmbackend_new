@@ -194,132 +194,138 @@ const syncModels = async () => {
     await sequelize.authenticate();
     console.log('Database connection established successfully');
 
-    await sequelize.sync({ force: true }); // Change to { force: false } in production
+    await sequelize.sync({ force: false }); // Changed to force: false to preserve existing data
     console.log('Database synced successfully');
 
-    const [assetType, liabilityType, incomeType, expenseType] = await AccountType.bulkCreate([
-      { name: 'Asset' }, 
-      { name: 'Liability' }, 
-      { name: 'Income' }, 
-      { name: 'Expense' }
-    ]);
-    
-    await TransactionType.bulkCreate([
-      { name: 'Income' }, 
-      { name: 'Expense' }, 
-      { name: 'Transfer' }
-    ]);
-    
-    const [prop1, prop2] = await Property.bulkCreate([
-      { 
-        name: 'Main St Property', 
-        address: '123 Main St', 
-        status: 'active', 
-        city: 'Portland', 
-        state: 'OR', 
-        zip: '97201', 
-        value: 500000 
-      },
-      { 
-        name: 'Oak Ave Property', 
-        address: '456 Oak Ave', 
-        status: 'active', 
-        city: 'Seattle', 
-        state: 'WA', 
-        zip: '98101', 
-        value: 600000 
-      }
-    ]);
-    
-    await Owner.bulkCreate([
-      { 
-        name: 'John Doe', 
-        email: 'john@example.com', 
-        phone: '555-0101', 
-        property_id: prop1.id 
-      }
-    ]);
-    
-    await Unit.bulkCreate([
-      { 
-        propertyId: prop1.id, 
-        unit_number: '101', 
-        rent_amount: 1200, 
-        status: 'occupied' 
-      },
-      { 
-        propertyId: prop2.id, 
-        unit_number: '201', 
-        rent_amount: 1500, 
-        status: 'vacant' 
-      }
-    ]);
-    
-    await Tenant.bulkCreate([
-      { 
-        name: 'Jane Smith', 
-        email: 'jane@example.com', 
-        phone: '555-0102', 
-        unit_id: 1, 
-        lease_start_date: new Date(), 
-        lease_end_date: new Date(2026, 0, 1), 
-        rent: 1200 
-      }
-    ]);
-    
-    await Association.bulkCreate([
-      { 
-        name: 'Main St HOA', 
-        contact_info: 'hoa@mainst.com', 
-        fee: 100, 
-        due_date: new Date(), 
-        property_id: prop1.id 
-      }
-    ]);
-    
-    await BoardMember.bulkCreate([
-      { 
-        name: 'Alice Brown', 
-        email: 'alice@example.com', 
-        phone: '555-0103', 
-        association_id: 1 
-      }
-    ]);
-    
-    await Account.bulkCreate([
-      { name: 'Rent Income', accountTypeId: incomeType.id }, 
-      { name: 'Maintenance Expense', accountTypeId: expenseType.id }
-    ]);
-    
-    await Transaction.bulkCreate([
-      { 
-        accountId: 1, 
-        transactionTypeId: 1, 
-        propertyId: prop1.id, 
-        amount: 1200, 
-        date: new Date(), 
-        description: 'Rent Payment' 
-      },
-      { 
-        accountId: 2, 
-        transactionTypeId: 2, 
-        propertyId: prop2.id, 
-        amount: 500, 
-        date: new Date(), 
-        description: 'Maintenance' 
-      }
-    ]);
-    
-    await Payment.bulkCreate([
-      { 
-        tenant_id: 1, 
-        amount: 1200, 
-        date: new Date(), 
-        status: 'paid' 
-      }
-    ]);
-    
-    console.log('Initial data seeded successfully');
+    // Seed data only if the tables are empty
+    const propertyCount = await Property.count();
+    if (propertyCount === 0) {
+      const [assetType, liabilityType, incomeType, expenseType] = await AccountType.bulkCreate([
+        { name: 'Asset' }, 
+        { name: 'Liability' }, 
+        { name: 'Income' }, 
+        { name: 'Expense' }
+      ]);
+      
+      await TransactionType.bulkCreate([
+        { name: 'Income' }, 
+        { name: 'Expense' }, 
+        { name: 'Transfer' }
+      ]);
+      
+      const [prop1, prop2] = await Property.bulkCreate([
+        { 
+          name: 'Main St Property', 
+          address: '123 Main St', 
+          status: 'active', 
+          city: 'Portland', 
+          state: 'OR', 
+          zip: '97201', 
+          value: 500000 
+        },
+        { 
+          name: 'Oak Ave Property', 
+          address: '456 Oak Ave', 
+          status: 'active', 
+          city: 'Seattle', 
+          state: 'WA', 
+          zip: '98101', 
+          value: 600000 
+        }
+      ]);
+      
+      await Owner.bulkCreate([
+        { 
+          name: 'John Doe', 
+          email: 'john@example.com', 
+          phone: '555-0101', 
+          property_id: prop1.id 
+        }
+      ]);
+      
+      await Unit.bulkCreate([
+        { 
+          propertyId: prop1.id, 
+          unit_number: '101', 
+          rent_amount: 1200, 
+          status: 'occupied' 
+        },
+        { 
+          propertyId: prop2.id, 
+          unit_number: '201', 
+          rent_amount: 1500, 
+          status: 'vacant' 
+        }
+      ]);
+      
+      await Tenant.bulkCreate([
+        { 
+          name: 'Jane Smith', 
+          email: 'jane@example.com', 
+          phone: '555-0102', 
+          unit_id: 1, 
+          lease_start_date: new Date(), 
+          lease_end_date: new Date(2026, 0, 1), 
+          rent: 1200 
+        }
+      ]);
+      
+      await Association.bulkCreate([
+        { 
+          name: 'Main St HOA', 
+          contact_info: 'hoa@mainst.com', 
+          fee: 100, 
+          due_date: new Date(), 
+          property_id: prop1.id 
+        }
+      ]);
+      
+      await BoardMember.bulkCreate([
+        { 
+          name: 'Alice Brown', 
+          email: 'alice@example.com', 
+          phone: '555-0103', 
+          association_id: 1 
+        }
+      ]);
+      
+      await Account.bulkCreate([
+        { name: 'Rent Income', accountTypeId: incomeType.id }, 
+        { name: 'Maintenance Expense', accountTypeId: expenseType.id }
+      ]);
+      
+      await Transaction.bulkCreate([
+        { 
+          accountId: 1, 
+          transactionTypeId: 1, 
+          propertyId: prop1.id, 
+          amount: 1200, 
+          date: new Date(), 
+          description: 'Rent Payment' 
+        },
+        { 
+          accountId: 2, 
+          transactionTypeId: 2, 
+          propertyId: prop2.id, 
+          amount: 500, 
+          date: new Date(), 
+          description: 'Maintenance' 
+        }
+      ]);
+      
+      await Payment.bulkCreate([
+        { 
+          tenant_id: 1, 
+          amount: 1200, 
+          date: new Date(), 
+          status: 'paid' 
+        }
+      ]);
+      
+      console.log('Initial data seeded successfully');
+    } else {
+      console.log('Tables already contain data; skipping seeding.');
+    }
     
   } catch (error) {
     console.error('Failed to sync database:', error);
@@ -337,7 +343,7 @@ app.get('/api/properties', async (req, res) => {
     const properties = await Property.findAll({ 
       include: [Owner, Unit, Association, Transaction] 
     });
-    res.json(properties); // Ensure response is sent
+    res.json(properties);
   } catch (error) {
     console.error('Error in /api/properties:', error);
     res.status(500).json({ error: error.message });
@@ -361,7 +367,7 @@ app.get('/api/units', async (req, res) => {
     const units = await Unit.findAll({ 
       include: [Property, Tenant] 
     });
-    res.json(units); // Ensure response is sent
+    res.json(units);
   } catch (error) {
     console.error('Error in /api/units:', error);
     res.status(500).json({ error: error.message });
@@ -385,7 +391,7 @@ app.get('/api/tenants', async (req, res) => {
     const tenants = await Tenant.findAll({ 
       include: [Unit, Payment] 
     });
-    res.json(tenants); // Ensure response is sent
+    res.json(tenants);
   } catch (error) {
     console.error('Error in /api/tenants:', error);
     res.status(500).json({ error: error.message });
@@ -409,7 +415,7 @@ app.get('/api/owners', async (req, res) => {
     const owners = await Owner.findAll({ 
       include: [Property] 
     });
-    res.json(owners); // Ensure response is sent
+    res.json(owners);
   } catch (error) {
     console.error('Error in /api/owners:', error);
     res.status(500).json({ error: error.message });
@@ -433,7 +439,7 @@ app.get('/api/associations', async (req, res) => {
     const associations = await Association.findAll({ 
       include: [Property, BoardMember] 
     });
-    res.json(associations); // Ensure response is sent
+    res.json(associations);
   } catch (error) {
     console.error('Error in /api/associations:', error);
     res.status(500).json({ error: error.message });
@@ -457,7 +463,7 @@ app.get('/api/board-members', async (req, res) => {
     const boardMembers = await BoardMember.findAll({ 
       include: [Association] 
     });
-    res.json(boardMembers); // Ensure response is sent
+    res.json(boardMembers);
   } catch (error) {
     console.error('Error in /api/board-members:', error);
     res.status(500).json({ error: error.message });
@@ -481,7 +487,7 @@ app.get('/api/accounts', async (req, res) => {
     const accounts = await Account.findAll({ 
       include: [AccountType, Transaction] 
     });
-    res.json(accounts); // Ensure response is sent
+    res.json(accounts);
   } catch (error) {
     console.error('Error in /api/accounts:', error);
     res.status(500).json({ error: error.message });
@@ -503,7 +509,7 @@ app.get('/api/account-types', async (req, res) => {
   try {
     console.log('Fetching account types...');
     const accountTypes = await AccountType.findAll();
-    res.json(accountTypes); // Ensure response is sent
+    res.json(accountTypes);
   } catch (error) {
     console.error('Error in /api/account-types:', error);
     res.status(500).json({ error: error.message });
@@ -527,7 +533,7 @@ app.get('/api/transactions', async (req, res) => {
     const transactions = await Transaction.findAll({ 
       include: [Account, TransactionType, Property] 
     });
-    res.json(transactions); // Ensure response is sent
+    res.json(transactions);
   } catch (error) {
     console.error('Error in /api/transactions:', error);
     res.status(500).json({ error: error.message });
@@ -551,7 +557,7 @@ app.get('/api/payments', async (req, res) => {
     const payments = await Payment.findAll({ 
       include: [Tenant] 
     });
-    res.json(payments); // Ensure response is sent
+    res.json(payments);
   } catch (error) {
     console.error('Error in /api/payments:', error);
     res.status(500).json({ error: error.message });
@@ -573,7 +579,7 @@ app.get('/api/transaction-types', async (req, res) => {
   try {
     console.log('Fetching transaction types...');
     const transactionTypes = await TransactionType.findAll();
-    res.json(transactionTypes); // Ensure response is sent
+    res.json(transactionTypes);
   } catch (error) {
     console.error('Error in /api/transaction-types:', error);
     res.status(500).json({ error: error.message });
@@ -595,4 +601,4 @@ app.post('/api/transaction-types', async (req, res) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-module.exports = app; // Export for testing purposes
+module.exports = app; // Export for testing purposess
