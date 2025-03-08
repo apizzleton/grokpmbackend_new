@@ -337,7 +337,7 @@ app.get('/api/properties', async (req, res) => {
     const properties = await Property.findAll({ 
       include: [Owner, Unit, Association, Transaction] 
     });
-    res.json(properties);
+    res.json(properties); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/properties:', error);
     res.status(500).json({ error: error.message });
@@ -361,7 +361,7 @@ app.get('/api/units', async (req, res) => {
     const units = await Unit.findAll({ 
       include: [Property, Tenant] 
     });
-    res.json(units);
+    res.json(units); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/units:', error);
     res.status(500).json({ error: error.message });
@@ -385,7 +385,7 @@ app.get('/api/tenants', async (req, res) => {
     const tenants = await Tenant.findAll({ 
       include: [Unit, Payment] 
     });
-    res.json(tenants);
+    res.json(tenants); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/tenants:', error);
     res.status(500).json({ error: error.message });
@@ -409,7 +409,7 @@ app.get('/api/owners', async (req, res) => {
     const owners = await Owner.findAll({ 
       include: [Property] 
     });
-    res.json(owners);
+    res.json(owners); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/owners:', error);
     res.status(500).json({ error: error.message });
@@ -433,7 +433,7 @@ app.get('/api/associations', async (req, res) => {
     const associations = await Association.findAll({ 
       include: [Property, BoardMember] 
     });
-    res.json(associations);
+    res.json(associations); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/associations:', error);
     res.status(500).json({ error: error.message });
@@ -457,7 +457,7 @@ app.get('/api/board-members', async (req, res) => {
     const boardMembers = await BoardMember.findAll({ 
       include: [Association] 
     });
-    res.json(boardMembers);
+    res.json(boardMembers); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/board-members:', error);
     res.status(500).json({ error: error.message });
@@ -481,7 +481,7 @@ app.get('/api/accounts', async (req, res) => {
     const accounts = await Account.findAll({ 
       include: [AccountType, Transaction] 
     });
-    res.json(accounts);
+    res.json(accounts); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/accounts:', error);
     res.status(500).json({ error: error.message });
@@ -503,7 +503,7 @@ app.get('/api/account-types', async (req, res) => {
   try {
     console.log('Fetching account types...');
     const accountTypes = await AccountType.findAll();
-    res.json(accountTypes);
+    res.json(accountTypes); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/account-types:', error);
     res.status(500).json({ error: error.message });
@@ -527,7 +527,7 @@ app.get('/api/transactions', async (req, res) => {
     const transactions = await Transaction.findAll({ 
       include: [Account, TransactionType, Property] 
     });
-    res.json(transactions);
+    res.json(transactions); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/transactions:', error);
     res.status(500).json({ error: error.message });
@@ -551,7 +551,7 @@ app.get('/api/payments', async (req, res) => {
     const payments = await Payment.findAll({ 
       include: [Tenant] 
     });
-    res.json(payments);
+    res.json(payments); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/payments:', error);
     res.status(500).json({ error: error.message });
@@ -569,19 +569,17 @@ app.post('/api/payments', async (req, res) => {
   }
 });
 
-// NEW: GET route for /api/transaction-types
 app.get('/api/transaction-types', async (req, res) => {
   try {
     console.log('Fetching transaction types...');
     const transactionTypes = await TransactionType.findAll();
-    res.json(transactionTypes);
+    res.json(transactionTypes); // Ensure response is sent
   } catch (error) {
     console.error('Error in /api/transaction-types:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// NEW: POST route for /api/transaction-types (optional, for completeness)
 app.post('/api/transaction-types', async (req, res) => {
   try {
     console.log('Creating transaction type:', req.body);
