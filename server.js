@@ -15,7 +15,7 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
-      console.log(`CORS blocked request from origin: ${origin}`);
+      console.log(`[${new Date().toISOString()}] CORS blocked request from origin: ${origin}`);
       callback(new Error('CORS policy: Origin not allowed'));
     }
   },
@@ -32,6 +32,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Error Logging Middleware
+app.use((err, req, res, next) => {
+  console.error(`[${new Date().toISOString()}] Error in middleware: ${err.message}`, err.stack);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 // Parse JSON requests
 app.use(express.json());
 
@@ -44,7 +50,13 @@ const sequelize = new Sequelize(process.env.DB_CONNECTION_STRING, {
       rejectUnauthorized: false 
     }
   },
-  logging: console.log // Enable SQL logging for debugging
+  logging: (msg) => console.log(`[${new Date().toISOString()}] SQL: ${msg}`), // Detailed SQL logging
+  pool: {
+    max: 5,
+    min: 0,
+    acquire: 30000,
+    idle: 10000
+  }
 });
 
 // Define Models
@@ -192,10 +204,10 @@ Payment.belongsTo(Tenant, { foreignKey: 'tenant_id' });
 const syncModels = async () => {
   try {
     await sequelize.authenticate();
-    console.log('Database connection established successfully');
+    console.log(`[${new Date().toISOString()}] Database connection established successfully`);
 
-    await sequelize.sync({ force: false }); // Changed to force: false to preserve existing data
-    console.log('Database synced successfully');
+    await sequelize.sync({ force: false });
+    console.log(`[${new Date().toISOString()}] Database synced successfully`);
 
     // Seed data only if the tables are empty
     const propertyCount = await Property.count();
@@ -322,13 +334,13 @@ const syncModels = async () => {
         }
       ]);
       
-      console.log('Initial data seeded successfully');
+      console.log(`[${new Date().toISOString()}] Initial data seeded successfully`);
     } else {
-      console.log('Tables already contain data; skipping seeding.');
+      console.log(`[${new Date().toISOString()}] Tables already contain data; skipping seeding.`);
     }
     
   } catch (error) {
-    console.error('Failed to sync database:', error);
+    console.error(`[${new Date().toISOString()}] Failed to sync database:`, error);
     process.exit(1); // Exit if DB fails
   }
 };
@@ -339,266 +351,291 @@ syncModels();
 // API Routes
 app.get('/api/properties', async (req, res) => {
   try {
-    console.log('Fetching properties...');
+    console.log(`[${new Date().toISOString()}] Fetching properties...`);
     const properties = await Property.findAll({ 
       include: [Owner, Unit, Association, Transaction] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${properties.length} properties`);
     res.json(properties);
   } catch (error) {
-    console.error('Error in /api/properties:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/properties:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/properties', async (req, res) => {
   try {
-    console.log('Creating property:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating property:`, req.body);
     const property = await Property.create(req.body);
     res.status(201).json(property);
   } catch (error) {
-    console.error('Error in POST /api/properties:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/properties:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/units', async (req, res) => {
   try {
-    console.log('Fetching units...');
+    console.log(`[${new Date().toISOString()}] Fetching units...`);
     const units = await Unit.findAll({ 
       include: [Property, Tenant] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${units.length} units`);
     res.json(units);
   } catch (error) {
-    console.error('Error in /api/units:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/units:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/units', async (req, res) => {
   try {
-    console.log('Creating unit:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating unit:`, req.body);
     const unit = await Unit.create(req.body);
     res.status(201).json(unit);
   } catch (error) {
-    console.error('Error in POST /api/units:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/units:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/tenants', async (req, res) => {
   try {
-    console.log('Fetching tenants...');
+    console.log(`[${new Date().toISOString()}] Fetching tenants...`);
     const tenants = await Tenant.findAll({ 
       include: [Unit, Payment] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${tenants.length} tenants`);
     res.json(tenants);
   } catch (error) {
-    console.error('Error in /api/tenants:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/tenants:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/tenants', async (req, res) => {
   try {
-    console.log('Creating tenant:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating tenant:`, req.body);
     const tenant = await Tenant.create(req.body);
     res.status(201).json(tenant);
   } catch (error) {
-    console.error('Error in POST /api/tenants:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/tenants:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/owners', async (req, res) => {
   try {
-    console.log('Fetching owners...');
+    console.log(`[${new Date().toISOString()}] Fetching owners...`);
     const owners = await Owner.findAll({ 
       include: [Property] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${owners.length} owners`);
     res.json(owners);
   } catch (error) {
-    console.error('Error in /api/owners:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/owners:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/owners', async (req, res) => {
   try {
-    console.log('Creating owner:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating owner:`, req.body);
     const owner = await Owner.create(req.body);
     res.status(201).json(owner);
   } catch (error) {
-    console.error('Error in POST /api/owners:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/owners:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/associations', async (req, res) => {
   try {
-    console.log('Fetching associations...');
+    console.log(`[${new Date().toISOString()}] Fetching associations...`);
     const associations = await Association.findAll({ 
       include: [Property, BoardMember] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${associations.length} associations`);
     res.json(associations);
   } catch (error) {
-    console.error('Error in /api/associations:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/associations:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/associations', async (req, res) => {
   try {
-    console.log('Creating association:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating association:`, req.body);
     const association = await Association.create(req.body);
     res.status(201).json(association);
   } catch (error) {
-    console.error('Error in POST /api/associations:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/associations:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/board-members', async (req, res) => {
   try {
-    console.log('Fetching board members...');
+    console.log(`[${new Date().toISOString()}] Fetching board members...`);
     const boardMembers = await BoardMember.findAll({ 
       include: [Association] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${boardMembers.length} board members`);
     res.json(boardMembers);
   } catch (error) {
-    console.error('Error in /api/board-members:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/board-members:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/board-members', async (req, res) => {
   try {
-    console.log('Creating board member:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating board member:`, req.body);
     const boardMember = await BoardMember.create(req.body);
     res.status(201).json(boardMember);
   } catch (error) {
-    console.error('Error in POST /api/board-members:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/board-members:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/accounts', async (req, res) => {
   try {
-    console.log('Fetching accounts...');
+    console.log(`[${new Date().toISOString()}] Fetching accounts...`);
     const accounts = await Account.findAll({ 
       include: [AccountType, Transaction] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${accounts.length} accounts`);
     res.json(accounts);
   } catch (error) {
-    console.error('Error in /api/accounts:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/accounts:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/accounts', async (req, res) => {
   try {
-    console.log('Creating account:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating account:`, req.body);
     const account = await Account.create(req.body);
     res.status(201).json(account);
   } catch (error) {
-    console.error('Error in POST /api/accounts:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/accounts:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/account-types', async (req, res) => {
   try {
-    console.log('Fetching account types...');
+    console.log(`[${new Date().toISOString()}] Fetching account types...`);
     const accountTypes = await AccountType.findAll();
+    console.log(`[${new Date().toISOString()}] Sending ${accountTypes.length} account types`);
     res.json(accountTypes);
   } catch (error) {
-    console.error('Error in /api/account-types:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/account-types:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/account-types', async (req, res) => {
   try {
-    console.log('Creating account type:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating account type:`, req.body);
     const accountType = await AccountType.create(req.body);
     res.status(201).json(accountType);
   } catch (error) {
-    console.error('Error in POST /api/account-types:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/account-types:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/transactions', async (req, res) => {
   try {
-    console.log('Fetching transactions...');
+    console.log(`[${new Date().toISOString()}] Fetching transactions...`);
     const transactions = await Transaction.findAll({ 
       include: [Account, TransactionType, Property] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${transactions.length} transactions`);
     res.json(transactions);
   } catch (error) {
-    console.error('Error in /api/transactions:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/transactions:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/transactions', async (req, res) => {
   try {
-    console.log('Creating transaction:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating transaction:`, req.body);
     const transaction = await Transaction.create(req.body);
     res.status(201).json(transaction);
   } catch (error) {
-    console.error('Error in POST /api/transactions:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/transactions:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/payments', async (req, res) => {
   try {
-    console.log('Fetching payments...');
+    console.log(`[${new Date().toISOString()}] Fetching payments...`);
     const payments = await Payment.findAll({ 
       include: [Tenant] 
     });
+    console.log(`[${new Date().toISOString()}] Sending ${payments.length} payments`);
     res.json(payments);
   } catch (error) {
-    console.error('Error in /api/payments:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/payments:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/payments', async (req, res) => {
   try {
-    console.log('Creating payment:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating payment:`, req.body);
     const payment = await Payment.create(req.body);
     res.status(201).json(payment);
   } catch (error) {
-    console.error('Error in POST /api/payments:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/payments:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 app.get('/api/transaction-types', async (req, res) => {
   try {
-    console.log('Fetching transaction types...');
+    console.log(`[${new Date().toISOString()}] Fetching transaction types...`);
     const transactionTypes = await TransactionType.findAll();
+    console.log(`[${new Date().toISOString()}] Sending ${transactionTypes.length} transaction types`);
     res.json(transactionTypes);
   } catch (error) {
-    console.error('Error in /api/transaction-types:', error);
+    console.error(`[${new Date().toISOString()}] Error in /api/transaction-types:`, error);
     res.status(500).json({ error: error.message });
   }
 });
 
 app.post('/api/transaction-types', async (req, res) => {
   try {
-    console.log('Creating transaction type:', req.body);
+    console.log(`[${new Date().toISOString()}] Creating transaction type:`, req.body);
     const transactionType = await TransactionType.create(req.body);
     res.status(201).json(transactionType);
   } catch (error) {
-    console.error('Error in POST /api/transaction-types:', error);
+    console.error(`[${new Date().toISOString()}] Error in POST /api/transaction-types:`, error);
     res.status(400).json({ error: error.message });
   }
 });
 
 // Start the Server
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`[${new Date().toISOString()}] Server running on port ${PORT}`);
+});
 
-module.exports = app; // Export for testing purposess
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error(`[${new Date().toISOString()}] Uncaught Exception: ${err.message}`, err.stack);
+  server.close(() => process.exit(1));
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(`[${new Date().toISOString()}] Unhandled Rejection at: ${promise}, reason: ${reason.message}`, reason.stack);
+  server.close(() => process.exit(1));
+});
+
+module.exports = app; // Export for testing purposes
