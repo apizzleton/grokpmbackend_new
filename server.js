@@ -305,7 +305,7 @@ const syncModels = async () => {
         transactionTypeId: 2, 
         propertyId: prop2.id, 
         amount: 500, 
-        date: New Date(), 
+        date: new Date(), 
         description: 'Maintenance' 
       }
     ]);
