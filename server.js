@@ -568,6 +568,79 @@ app.post('/api/transaction-types', async (req, res) => {
 });
 
 // PUT and DELETE endpoints for Properties
+app.delete('/api/properties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[${new Date().toISOString()}] Attempting to delete property with ID: ${id}`);
+    
+    const property = await Property.findByPk(id, {
+      include: [{
+        model: PropertyAddress,
+        as: 'addresses'
+      }]
+    });
+    
+    if (!property) {
+      console.log(`[${new Date().toISOString()}] Property with ID ${id} not found for deletion`);
+      return res.status(404).json({ error: `Property with ID ${id} not found` });
+    }
+    
+    // Get all address IDs for this property
+    const addressIds = property.addresses.map(addr => addr.id);
+    
+    // Delete associated units first (based on address_id)
+    if (addressIds.length > 0) {
+      // Find units associated with these addresses
+      const units = await Unit.findAll({
+        where: {
+          address_id: {
+            [Sequelize.Op.in]: addressIds
+          }
+        }
+      });
+      
+      // Get unit IDs
+      const unitIds = units.map(unit => unit.id);
+      
+      // Delete tenants associated with these units
+      if (unitIds.length > 0) {
+        await Tenant.destroy({
+          where: {
+            unit_id: {
+              [Sequelize.Op.in]: unitIds
+            }
+          }
+        });
+      }
+      
+      // Delete the units
+      await Unit.destroy({
+        where: {
+          address_id: {
+            [Sequelize.Op.in]: addressIds
+          }
+        }
+      });
+      
+      // Delete the addresses
+      await PropertyAddress.destroy({
+        where: {
+          property_id: id
+        }
+      });
+    }
+    
+    // Delete the property
+    await property.destroy();
+    console.log(`[${new Date().toISOString()}] Successfully deleted property with ID: ${id}`);
+    
+    res.status(200).json({ message: `Property with ID ${id} successfully deleted` });
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in DELETE /api/properties/${req.params.id}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/properties/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -582,32 +655,6 @@ app.put('/api/properties/:id', async (req, res) => {
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in PUT /api/properties/${req.params.id}:`, error);
     res.status(400).json({ error: error.message });
-  }
-});
-
-app.delete('/api/properties/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log(`[${new Date().toISOString()}] Attempting to delete property with ID: ${id}`);
-    
-    const property = await Property.findByPk(id);
-    
-    if (!property) {
-      console.log(`[${new Date().toISOString()}] Property with ID ${id} not found for deletion`);
-      return res.status(404).json({ error: `Property with ID ${id} not found` });
-    }
-    
-    // Delete associated units first
-    await Unit.destroy({ where: { propertyId: id } });
-    
-    // Delete the property
-    await property.destroy();
-    console.log(`[${new Date().toISOString()}] Successfully deleted property with ID: ${id}`);
-    
-    res.status(200).json({ message: `Property with ID ${id} successfully deleted` });
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error in DELETE /api/properties/${req.params.id}:`, error);
-    res.status(500).json({ error: error.message });
   }
 });
 
