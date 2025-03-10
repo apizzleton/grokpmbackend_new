@@ -630,6 +630,13 @@ app.delete('/api/properties/:id', async (req, res) => {
       });
     }
     
+    // Delete associated owners
+    await Owner.destroy({
+      where: {
+        property_id: id
+      }
+    });
+    
     // Delete the property
     await property.destroy();
     console.log(`[${new Date().toISOString()}] Successfully deleted property with ID: ${id}`);
