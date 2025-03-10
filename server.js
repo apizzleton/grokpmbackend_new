@@ -217,6 +217,7 @@ app.get('/api/properties', async (req, res) => {
 app.post('/api/properties', async (req, res) => {
   const t = await sequelize.transaction();
   try {
+    console.log(`[${new Date().toISOString()}] Request body: `, req.body);
     const { name, property_type, status, value, owner_id, addresses } = req.body;
     
     // Create property
