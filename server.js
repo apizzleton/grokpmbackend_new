@@ -570,82 +570,29 @@ app.post('/api/transaction-types', async (req, res) => {
 
 // PUT and DELETE endpoints for Properties
 app.delete('/api/properties/:id', async (req, res) => {
+  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
     console.log(`[${new Date().toISOString()}] Attempting to delete property with ID: ${id}`);
-    
-    const property = await Property.findByPk(id, {
-      include: [{
-        model: PropertyAddress,
-        as: 'addresses'
-      }]
+
+    // Delete associated addresses first (this will cascade to units)
+    await PropertyAddress.destroy({
+      where: { property_id: id },
+      transaction: t
     });
-    
-    if (!property) {
-      console.log(`[${new Date().toISOString()}] Property with ID ${id} not found for deletion`);
-      return res.status(404).json({ error: `Property with ID ${id} not found` });
-    }
-    
-    // Get all address IDs for this property
-    const addressIds = property.addresses.map(addr => addr.id);
-    
-    // Delete associated units first (based on address_id)
-    if (addressIds.length > 0) {
-      // Find units associated with these addresses
-      const units = await Unit.findAll({
-        where: {
-          address_id: {
-            [Sequelize.Op.in]: addressIds
-          }
-        }
-      });
-      
-      // Get unit IDs
-      const unitIds = units.map(unit => unit.id);
-      
-      // Delete tenants associated with these units
-      if (unitIds.length > 0) {
-        await Tenant.destroy({
-          where: {
-            unit_id: {
-              [Sequelize.Op.in]: unitIds
-            }
-          }
-        });
-      }
-      
-      // Delete the units
-      await Unit.destroy({
-        where: {
-          address_id: {
-            [Sequelize.Op.in]: addressIds
-          }
-        }
-      });
-      
-      // Delete the addresses
-      await PropertyAddress.destroy({
-        where: {
-          property_id: id
-        }
-      });
-    }
-    
-    // Delete associated owners
-    await Owner.destroy({
-      where: {
-        property_id: id
-      }
-    });
-    
+
     // Delete the property
-    await property.destroy();
-    console.log(`[${new Date().toISOString()}] Successfully deleted property with ID: ${id}`);
-    
-    res.status(200).json({ message: `Property with ID ${id} successfully deleted` });
+    await Property.destroy({
+      where: { id },
+      transaction: t
+    });
+
+    await t.commit();
+    res.status(204).send();
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error in DELETE /api/properties/${req.params.id}:`, error);
-    res.status(500).json({ error: error.message });
+    await t.rollback();
+    console.error('Error deleting property:', error);
+    res.status(500).json({ error: 'Failed to delete property' });
   }
 });
 
