@@ -5,16 +5,13 @@ require('dotenv').config();
 
 const app = express();
 
-// Enable CORS for all routes
+// Enable CORS for all origins
 app.use(cors({
-  origin: ['https://grokpmfrontend.onrender.com', 'http://localhost:3002'],
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  credentials: false
 }));
-
-// Handle preflight requests
-app.options('*', cors());
 
 app.use(express.json());
 
