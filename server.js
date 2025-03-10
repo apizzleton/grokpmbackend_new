@@ -217,7 +217,7 @@ app.get('/api/properties', async (req, res) => {
 app.post('/api/properties', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    console.log(`[${new Date().toISOString()}] Request body: `, req.body);
+    console.log(`[${new Date().toISOString()}] Creating new property with data:`, JSON.stringify(req.body, null, 2));
     const { name, property_type, status, value, owner_id, addresses } = req.body;
     
     // Create property
@@ -225,12 +225,15 @@ app.post('/api/properties', async (req, res) => {
       name,
       property_type,
       status,
-      value: value === '' ? 0 : value,
-      owner_id
+      value: value === '' ? 0 : parseFloat(value),
+      owner_id: owner_id || null
     }, { transaction: t });
+
+    console.log(`[${new Date().toISOString()}] Created property:`, JSON.stringify(property, null, 2));
 
     // Create addresses
     if (addresses && addresses.length > 0) {
+      console.log(`[${new Date().toISOString()}] Creating ${addresses.length} addresses for property ${property.id}`);
       const addressPromises = addresses.map((addr, index) => 
         PropertyAddress.create({
           ...addr,
@@ -242,6 +245,7 @@ app.post('/api/properties', async (req, res) => {
     }
 
     await t.commit();
+    console.log(`[${new Date().toISOString()}] Successfully committed transaction`);
 
     // Fetch the created property with its addresses
     const createdProperty = await Property.findByPk(property.id, {
@@ -254,8 +258,15 @@ app.post('/api/properties', async (req, res) => {
     res.status(201).json(createdProperty);
   } catch (error) {
     await t.rollback();
-    console.error('Error creating property:', error);
-    res.status(500).json({ error: 'Failed to create property' });
+    console.error('Error creating property:', {
+      message: error.message,
+      stack: error.stack,
+      requestBody: req.body
+    });
+    res.status(500).json({ 
+      error: 'Failed to create property',
+      details: error.message 
+    });
   }
 });
 
