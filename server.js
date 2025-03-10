@@ -438,6 +438,94 @@ app.post('/api/transaction-types', async (req, res) => {
   }
 });
 
+// PUT and DELETE endpoints for Properties
+app.put('/api/properties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const property = await Property.findByPk(id);
+    
+    if (!property) {
+      return res.status(404).json({ error: `Property with ID ${id} not found` });
+    }
+    
+    await property.update(req.body);
+    res.json(property);
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in PUT /api/properties/${req.params.id}:`, error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/properties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[${new Date().toISOString()}] Attempting to delete property with ID: ${id}`);
+    
+    const property = await Property.findByPk(id);
+    
+    if (!property) {
+      console.log(`[${new Date().toISOString()}] Property with ID ${id} not found for deletion`);
+      return res.status(404).json({ error: `Property with ID ${id} not found` });
+    }
+    
+    // Delete associated units first
+    await Unit.destroy({ where: { propertyId: id } });
+    
+    // Delete the property
+    await property.destroy();
+    console.log(`[${new Date().toISOString()}] Successfully deleted property with ID: ${id}`);
+    
+    res.status(200).json({ message: `Property with ID ${id} successfully deleted` });
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in DELETE /api/properties/${req.params.id}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT and DELETE endpoints for Units
+app.put('/api/units/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const unit = await Unit.findByPk(id);
+    
+    if (!unit) {
+      return res.status(404).json({ error: `Unit with ID ${id} not found` });
+    }
+    
+    await unit.update(req.body);
+    res.json(unit);
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in PUT /api/units/${req.params.id}:`, error);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/units/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`[${new Date().toISOString()}] Attempting to delete unit with ID: ${id}`);
+    
+    const unit = await Unit.findByPk(id);
+    
+    if (!unit) {
+      console.log(`[${new Date().toISOString()}] Unit with ID ${id} not found for deletion`);
+      return res.status(404).json({ error: `Unit with ID ${id} not found` });
+    }
+    
+    // Delete associated tenants first
+    await Tenant.destroy({ where: { unit_id: id } });
+    
+    // Delete the unit
+    await unit.destroy();
+    console.log(`[${new Date().toISOString()}] Successfully deleted unit with ID: ${id}`);
+    
+    res.status(200).json({ message: `Unit with ID ${id} successfully deleted` });
+  } catch (error) {
+    console.error(`[${new Date().toISOString()}] Error in DELETE /api/units/${req.params.id}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start the Server
 const PORT = process.env.PORT || 10000;
 const server = app.listen(PORT, () => {
