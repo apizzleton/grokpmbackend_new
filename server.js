@@ -225,7 +225,7 @@ app.post('/api/properties', async (req, res) => {
       name,
       property_type,
       status,
-      value,
+      value: value === '' ? 0 : value,
       owner_id
     }, { transaction: t });
 
@@ -270,7 +270,7 @@ app.put('/api/properties/:id', async (req, res) => {
       name,
       property_type,
       status,
-      value,
+      value: value === '' ? 0 : value,
       owner_id
     }, { 
       where: { id },
