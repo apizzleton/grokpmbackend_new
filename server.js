@@ -231,10 +231,10 @@ Tenant.hasMany(Payment, { foreignKey: 'tenant_id' });
 Payment.belongsTo(Tenant, { foreignKey: 'tenant_id' });
 
 // Maintenance relationships
-Property.hasMany(Maintenance, { foreignKey: 'property_id' });
+Property.hasMany(Maintenance, { foreignKey: 'property_id', as: 'maintenance' });
 Maintenance.belongsTo(Property, { foreignKey: 'property_id' });
 
-Unit.hasMany(Maintenance, { foreignKey: 'unit_id' });
+Unit.hasMany(Maintenance, { foreignKey: 'unit_id', as: 'maintenance' });
 Maintenance.belongsTo(Unit, { foreignKey: 'unit_id' });
 
 // API Routes
@@ -784,14 +784,20 @@ app.get('/api/maintenance', async (req, res) => {
   try {
     const maintenance = await Maintenance.findAll({
       include: [
-        { model: Property, as: 'property' },
-        { model: Unit, as: 'unit' }
+        { 
+          model: Property,
+          required: false // Make this a LEFT JOIN to handle null property_id
+        },
+        { 
+          model: Unit,
+          required: false // Make this a LEFT JOIN to handle null unit_id
+        }
       ]
     });
     res.json(maintenance);
   } catch (error) {
     console.error('Error fetching maintenance:', error);
-    res.status(500).json({ error: 'Failed to fetch maintenance' });
+    res.status(500).json({ error: 'Failed to fetch maintenance', details: error.message });
   }
 });
 
