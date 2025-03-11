@@ -124,26 +124,49 @@ const BoardMember = sequelize.define('BoardMember', {
   association_id: { type: DataTypes.INTEGER, references: { model: 'Associations', key: 'id' } }
 });
 
-const Account = sequelize.define('Account', {
-  name: DataTypes.STRING,
-  accountTypeId: { type: DataTypes.INTEGER, references: { model: 'AccountTypes', key: 'id' } }
+const AccountType = sequelize.define('AccountType', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  description: {
+    type: DataTypes.STRING
+  }
 });
 
-const AccountType = sequelize.define('AccountType', {
-  name: DataTypes.STRING
+const Account = sequelize.define('Account', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  accountTypeId: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  }
 });
 
 const Transaction = sequelize.define('Transaction', {
-  accountId: { type: DataTypes.INTEGER, references: { model: 'Accounts', key: 'id' } },
-  transactionTypeId: { type: DataTypes.INTEGER, references: { model: 'TransactionTypes', key: 'id' } },
-  propertyId: { type: DataTypes.INTEGER, references: { model: 'Properties', key: 'id' } },
-  amount: DataTypes.FLOAT,
-  date: DataTypes.DATE,
-  description: DataTypes.STRING
-});
-
-const TransactionType = sequelize.define('TransactionType', {
-  name: DataTypes.STRING
+  date: {
+    type: DataTypes.DATE,
+    allowNull: false,
+    defaultValue: DataTypes.NOW
+  },
+  description: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false
+  },
+  accountId: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  propertyId: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  }
 });
 
 const Payment = sequelize.define('Payment', {
@@ -151,6 +174,31 @@ const Payment = sequelize.define('Payment', {
   amount: DataTypes.FLOAT,
   date: DataTypes.DATE,
   status: DataTypes.STRING
+});
+
+// Define Maintenance model
+const Maintenance = sequelize.define('Maintenance', {
+  title: DataTypes.STRING,
+  description: DataTypes.TEXT,
+  priority: {
+    type: DataTypes.STRING,
+    defaultValue: 'medium'
+  },
+  status: {
+    type: DataTypes.STRING,
+    defaultValue: 'open'
+  },
+  property_id: { 
+    type: DataTypes.INTEGER,
+    references: { model: 'Properties', key: 'id' }
+  },
+  unit_id: { 
+    type: DataTypes.INTEGER,
+    references: { model: 'Units', key: 'id' }
+  },
+  reported_by: DataTypes.STRING,
+  assigned_to: DataTypes.STRING,
+  due_date: DataTypes.DATE
 });
 
 // Define Relationships
@@ -172,20 +220,22 @@ Association.belongsTo(Property, { foreignKey: 'property_id' });
 Association.hasMany(BoardMember, { foreignKey: 'association_id' });
 BoardMember.belongsTo(Association, { foreignKey: 'association_id' });
 
-AccountType.hasMany(Account, { foreignKey: 'accountTypeId' });
 Account.belongsTo(AccountType, { foreignKey: 'accountTypeId' });
-
-Account.hasMany(Transaction, { foreignKey: 'accountId' });
+AccountType.hasMany(Account, { foreignKey: 'accountTypeId' });
 Transaction.belongsTo(Account, { foreignKey: 'accountId' });
-
-TransactionType.hasMany(Transaction, { foreignKey: 'transactionTypeId' });
-Transaction.belongsTo(TransactionType, { foreignKey: 'transactionTypeId' });
-
-Property.hasMany(Transaction, { foreignKey: 'propertyId' });
+Account.hasMany(Transaction, { foreignKey: 'accountId' });
 Transaction.belongsTo(Property, { foreignKey: 'propertyId' });
+Property.hasMany(Transaction, { foreignKey: 'propertyId' });
 
 Tenant.hasMany(Payment, { foreignKey: 'tenant_id' });
 Payment.belongsTo(Tenant, { foreignKey: 'tenant_id' });
+
+// Maintenance relationships
+Property.hasMany(Maintenance, { foreignKey: 'property_id' });
+Maintenance.belongsTo(Property, { foreignKey: 'property_id' });
+
+Unit.hasMany(Maintenance, { foreignKey: 'unit_id' });
+Maintenance.belongsTo(Unit, { foreignKey: 'unit_id' });
 
 // API Routes
 app.get('/api/properties', async (req, res) => {
@@ -472,26 +522,6 @@ app.post('/api/board-members', async (req, res) => {
   }
 });
 
-app.get('/api/accounts', async (req, res) => {
-  try {
-    const accounts = await Account.findAll({ include: [AccountType, Transaction] });
-    res.json(accounts);
-  } catch (error) {
-    console.error('Error fetching accounts:', error);
-    res.status(500).json({ error: 'Failed to fetch accounts' });
-  }
-});
-
-app.post('/api/accounts', async (req, res) => {
-  try {
-    const account = await Account.create(req.body);
-    res.status(201).json(account);
-  } catch (error) {
-    console.error('Error creating account:', error);
-    res.status(500).json({ error: 'Failed to create account' });
-  }
-});
-
 app.get('/api/account-types', async (req, res) => {
   try {
     const accountTypes = await AccountType.findAll();
@@ -504,7 +534,8 @@ app.get('/api/account-types', async (req, res) => {
 
 app.post('/api/account-types', async (req, res) => {
   try {
-    const accountType = await AccountType.create(req.body);
+    const { name, description } = req.body;
+    const accountType = await AccountType.create({ name, description });
     res.status(201).json(accountType);
   } catch (error) {
     console.error('Error creating account type:', error);
@@ -512,9 +543,116 @@ app.post('/api/account-types', async (req, res) => {
   }
 });
 
+app.put('/api/account-types/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description } = req.body;
+    
+    const accountType = await AccountType.findByPk(id);
+    if (!accountType) {
+      return res.status(404).json({ error: 'Account type not found' });
+    }
+    
+    accountType.name = name;
+    accountType.description = description;
+    await accountType.save();
+    
+    res.json(accountType);
+  } catch (error) {
+    console.error('Error updating account type:', error);
+    res.status(500).json({ error: 'Failed to update account type' });
+  }
+});
+
+app.delete('/api/account-types/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const accountType = await AccountType.findByPk(id);
+    if (!accountType) {
+      return res.status(404).json({ error: 'Account type not found' });
+    }
+    
+    await accountType.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting account type:', error);
+    res.status(500).json({ error: 'Failed to delete account type' });
+  }
+});
+
+app.get('/api/accounts', async (req, res) => {
+  try {
+    const accounts = await Account.findAll({
+      include: [AccountType]
+    });
+    res.json(accounts);
+  } catch (error) {
+    console.error('Error fetching accounts:', error);
+    res.status(500).json({ error: 'Failed to fetch accounts' });
+  }
+});
+
+app.post('/api/accounts', async (req, res) => {
+  try {
+    const { name, accountTypeId } = req.body;
+    const account = await Account.create({ name, accountTypeId });
+    res.status(201).json(account);
+  } catch (error) {
+    console.error('Error creating account:', error);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+app.put('/api/accounts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, accountTypeId } = req.body;
+    
+    const account = await Account.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    
+    account.name = name;
+    account.accountTypeId = accountTypeId;
+    await account.save();
+    
+    res.json(account);
+  } catch (error) {
+    console.error('Error updating account:', error);
+    res.status(500).json({ error: 'Failed to update account' });
+  }
+});
+
+app.delete('/api/accounts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const account = await Account.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    
+    await account.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 app.get('/api/transactions', async (req, res) => {
   try {
-    const transactions = await Transaction.findAll({ include: [Account, TransactionType, Property] });
+    const transactions = await Transaction.findAll({
+      include: [
+        {
+          model: Account,
+          include: [AccountType]
+        },
+        Property
+      ]
+    });
     res.json(transactions);
   } catch (error) {
     console.error('Error fetching transactions:', error);
@@ -524,11 +662,80 @@ app.get('/api/transactions', async (req, res) => {
 
 app.post('/api/transactions', async (req, res) => {
   try {
-    const transaction = await Transaction.create(req.body);
-    res.status(201).json(transaction);
+    const { date, description, amount, accountId, propertyId } = req.body;
+    const transaction = await Transaction.create({
+      date,
+      description,
+      amount,
+      accountId,
+      propertyId
+    });
+    
+    const newTransaction = await Transaction.findByPk(transaction.id, {
+      include: [
+        {
+          model: Account,
+          include: [AccountType]
+        },
+        Property
+      ]
+    });
+    
+    res.status(201).json(newTransaction);
   } catch (error) {
     console.error('Error creating transaction:', error);
     res.status(500).json({ error: 'Failed to create transaction' });
+  }
+});
+
+app.put('/api/transactions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, description, amount, accountId, propertyId } = req.body;
+    
+    const transaction = await Transaction.findByPk(id);
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    
+    transaction.date = date;
+    transaction.description = description;
+    transaction.amount = amount;
+    transaction.accountId = accountId;
+    transaction.propertyId = propertyId;
+    await transaction.save();
+    
+    const updatedTransaction = await Transaction.findByPk(id, {
+      include: [
+        {
+          model: Account,
+          include: [AccountType]
+        },
+        Property
+      ]
+    });
+    
+    res.json(updatedTransaction);
+  } catch (error) {
+    console.error('Error updating transaction:', error);
+    res.status(500).json({ error: 'Failed to update transaction' });
+  }
+});
+
+app.delete('/api/transactions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const transaction = await Transaction.findByPk(id);
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+    
+    await transaction.destroy();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting transaction:', error);
+    res.status(500).json({ error: 'Failed to delete transaction' });
   }
 });
 
@@ -569,6 +776,55 @@ app.post('/api/transaction-types', async (req, res) => {
   } catch (error) {
     console.error('Error creating transaction type:', error);
     res.status(500).json({ error: 'Failed to create transaction type' });
+  }
+});
+
+// Maintenance API Endpoints
+app.get('/api/maintenance', async (req, res) => {
+  try {
+    const maintenance = await Maintenance.findAll({
+      include: [
+        { model: Property, as: 'property' },
+        { model: Unit, as: 'unit' }
+      ]
+    });
+    res.json(maintenance);
+  } catch (error) {
+    console.error('Error fetching maintenance:', error);
+    res.status(500).json({ error: 'Failed to fetch maintenance' });
+  }
+});
+
+app.post('/api/maintenance', async (req, res) => {
+  try {
+    const maintenance = await Maintenance.create(req.body);
+    res.status(201).json(maintenance);
+  } catch (error) {
+    console.error('Error creating maintenance:', error);
+    res.status(500).json({ error: 'Failed to create maintenance' });
+  }
+});
+
+app.put('/api/maintenance/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Maintenance.update(req.body, { where: { id } });
+    const updatedMaintenance = await Maintenance.findByPk(id);
+    res.json(updatedMaintenance);
+  } catch (error) {
+    console.error('Error updating maintenance:', error);
+    res.status(500).json({ error: 'Failed to update maintenance' });
+  }
+});
+
+app.delete('/api/maintenance/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Maintenance.destroy({ where: { id } });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting maintenance:', error);
+    res.status(500).json({ error: 'Failed to delete maintenance' });
   }
 });
 
