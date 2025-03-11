@@ -931,6 +931,19 @@ const syncModels = async () => {
 
     await sequelize.sync({ alter: true });
     console.log(`[${new Date().toISOString()}] Database synced successfully`);
+    
+    // Add default account types if they don't exist
+    const accountTypes = ['Income', 'Expense', 'Asset', 'Liability', 'Equity', 'Bank'];
+    for (const typeName of accountTypes) {
+      const exists = await AccountType.findOne({ where: { name: typeName } });
+      if (!exists) {
+        await AccountType.create({ 
+          name: typeName, 
+          description: `${typeName} account for double-entry accounting` 
+        });
+        console.log(`Created account type: ${typeName}`);
+      }
+    }
   } catch (error) {
     console.error('Database sync error:', error);
     process.exit(1);
