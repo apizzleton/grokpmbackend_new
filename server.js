@@ -18,7 +18,7 @@ app.use(cors({
 // Handle OPTIONS requests explicitly
 app.options('*', cors());
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Request Logging Middleware
 app.use((req, res, next) => {
@@ -201,6 +201,30 @@ const Maintenance = sequelize.define('Maintenance', {
   due_date: DataTypes.DATE
 });
 
+// Define Photo model
+const Photo = sequelize.define('Photo', {
+  property_id: { 
+    type: DataTypes.INTEGER,
+    references: { model: 'Properties', key: 'id' }
+  },
+  unit_id: { 
+    type: DataTypes.INTEGER,
+    references: { model: 'Units', key: 'id' }
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  url: {
+    type: DataTypes.TEXT('long'),
+    allowNull: false
+  },
+  is_main: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  }
+});
+
 // Define Relationships
 Property.hasMany(PropertyAddress, { foreignKey: 'property_id', as: 'addresses' });
 PropertyAddress.belongsTo(Property, { foreignKey: 'property_id' });
@@ -237,23 +261,71 @@ Maintenance.belongsTo(Property, { foreignKey: 'property_id' });
 Unit.hasMany(Maintenance, { foreignKey: 'unit_id', as: 'maintenance' });
 Maintenance.belongsTo(Unit, { foreignKey: 'unit_id' });
 
+// Photo relationships
+Property.hasMany(Photo, { foreignKey: 'property_id', as: 'photos' });
+Photo.belongsTo(Property, { foreignKey: 'property_id' });
+
+Unit.hasMany(Photo, { foreignKey: 'unit_id', as: 'photos' });
+Photo.belongsTo(Unit, { foreignKey: 'unit_id' });
+
 // API Routes
 app.get('/api/properties', async (req, res) => {
   try {
     const properties = await Property.findAll({
-      include: [{
-        model: PropertyAddress,
-        as: 'addresses',
-        include: [{
-          model: Unit,
-          as: 'units'
-        }]
-      }]
+      include: [
+        {
+          model: PropertyAddress,
+          as: 'addresses',
+          include: [
+            {
+              model: Unit,
+              as: 'units'
+            }
+          ]
+        },
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
     });
     res.json(properties);
   } catch (error) {
     console.error('Error fetching properties:', error);
     res.status(500).json({ error: 'Failed to fetch properties' });
+  }
+});
+
+app.get('/api/properties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const property = await Property.findByPk(id, {
+      include: [
+        {
+          model: PropertyAddress,
+          as: 'addresses',
+          include: [
+            {
+              model: Unit,
+              as: 'units'
+            }
+          ]
+        },
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
+    });
+    
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+    
+    res.json(property);
+  } catch (error) {
+    console.error('Error fetching property:', error);
+    res.status(500).json({ error: 'Failed to fetch property' });
   }
 });
 
@@ -292,10 +364,22 @@ app.post('/api/properties', async (req, res) => {
 
     // Fetch the created property with its addresses
     const createdProperty = await Property.findByPk(property.id, {
-      include: [{
-        model: PropertyAddress,
-        as: 'addresses'
-      }]
+      include: [
+        {
+          model: PropertyAddress,
+          as: 'addresses',
+          include: [
+            {
+              model: Unit,
+              as: 'units'
+            }
+          ]
+        },
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
     });
 
     res.status(201).json(createdProperty);
@@ -317,7 +401,7 @@ app.put('/api/properties/:id', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { name, property_type, status, value, owner_id, addresses } = req.body;
+    const { name, property_type, status, value, owner_id, addresses, photos } = req.body;
 
     // Update property
     await Property.update({
@@ -359,18 +443,74 @@ app.put('/api/properties/:id', async (req, res) => {
       }
     }
 
+    // Handle photos if provided
+    if (photos) {
+      // Get existing photos
+      const existingPhotos = await Photo.findAll({
+        where: { property_id: id },
+        transaction: t
+      });
+      
+      const existingPhotoIds = existingPhotos.map(p => p.id);
+      const updatedPhotoIds = photos.filter(p => p.id).map(p => p.id);
+      
+      // Delete photos that are no longer in the updated list
+      const photosToDelete = existingPhotoIds.filter(id => !updatedPhotoIds.includes(id));
+      if (photosToDelete.length > 0) {
+        await Photo.destroy({
+          where: {
+            id: { [Sequelize.Op.in]: photosToDelete }
+          },
+          transaction: t
+        });
+      }
+      
+      // Update or create photos
+      for (const photo of photos) {
+        if (photo.id) {
+          // Update existing photo
+          await Photo.update(
+            { 
+              name: photo.name,
+              is_main: photo.is_main
+            },
+            { where: { id: photo.id }, transaction: t }
+          );
+        } else {
+          // Create new photo
+          await Photo.create(
+            {
+              property_id: id,
+              name: photo.name,
+              url: photo.url,
+              is_main: photo.is_main
+            },
+            { transaction: t }
+          );
+        }
+      }
+    }
+
     await t.commit();
 
     // Fetch updated property
     const updatedProperty = await Property.findByPk(id, {
-      include: [{
-        model: PropertyAddress,
-        as: 'addresses',
-        include: [{
-          model: Unit,
-          as: 'units'
-        }]
-      }]
+      include: [
+        {
+          model: PropertyAddress,
+          as: 'addresses',
+          include: [
+            {
+              model: Unit,
+              as: 'units'
+            }
+          ]
+        },
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
     });
 
     res.json(updatedProperty);
@@ -424,7 +564,16 @@ app.delete('/api/properties/addresses/:id', async (req, res) => {
 
 app.get('/api/units', async (req, res) => {
   try {
-    const units = await Unit.findAll({ include: [PropertyAddress, Tenant] });
+    const units = await Unit.findAll({ 
+      include: [
+        PropertyAddress, 
+        Tenant,
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ] 
+    });
     res.json(units);
   } catch (error) {
     console.error('Error fetching units:', error);
@@ -432,10 +581,45 @@ app.get('/api/units', async (req, res) => {
   }
 });
 
+app.get('/api/units/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const unit = await Unit.findByPk(id, {
+      include: [
+        PropertyAddress, 
+        Tenant,
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
+    });
+    
+    if (!unit) {
+      return res.status(404).json({ error: 'Unit not found' });
+    }
+    
+    res.json(unit);
+  } catch (error) {
+    console.error('Error fetching unit:', error);
+    res.status(500).json({ error: 'Failed to fetch unit' });
+  }
+});
+
 app.post('/api/units', async (req, res) => {
   try {
     const unit = await Unit.create(req.body);
-    res.status(201).json(unit);
+    const createdUnit = await Unit.findByPk(unit.id, {
+      include: [
+        PropertyAddress, 
+        Tenant,
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
+    });
+    res.status(201).json(createdUnit);
   } catch (error) {
     console.error('Error creating unit:', error);
     res.status(500).json({ error: 'Failed to create unit' });
@@ -862,38 +1046,86 @@ app.delete('/api/properties/:id', async (req, res) => {
   }
 });
 
-app.put('/api/properties/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const property = await Property.findByPk(id);
-    
-    if (!property) {
-      return res.status(404).json({ error: `Property with ID ${id} not found` });
-    }
-    
-    await property.update(req.body);
-    res.json(property);
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error in PUT /api/properties/${req.params.id}:`, error);
-    res.status(400).json({ error: error.message });
-  }
-});
-
 // PUT and DELETE endpoints for Units
 app.put('/api/units/:id', async (req, res) => {
+  const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const unit = await Unit.findByPk(id);
+    const { photos, ...unitData } = req.body;
     
-    if (!unit) {
-      return res.status(404).json({ error: `Unit with ID ${id} not found` });
+    // Update unit
+    await Unit.update(unitData, { 
+      where: { id },
+      transaction: t 
+    });
+    
+    // Handle photos if provided
+    if (photos) {
+      // Get existing photos
+      const existingPhotos = await Photo.findAll({
+        where: { unit_id: id },
+        transaction: t
+      });
+      
+      const existingPhotoIds = existingPhotos.map(p => p.id);
+      const updatedPhotoIds = photos.filter(p => p.id).map(p => p.id);
+      
+      // Delete photos that are no longer in the updated list
+      const photosToDelete = existingPhotoIds.filter(id => !updatedPhotoIds.includes(id));
+      if (photosToDelete.length > 0) {
+        await Photo.destroy({
+          where: {
+            id: { [Sequelize.Op.in]: photosToDelete }
+          },
+          transaction: t
+        });
+      }
+      
+      // Update or create photos
+      for (const photo of photos) {
+        if (photo.id) {
+          // Update existing photo
+          await Photo.update(
+            { 
+              name: photo.name,
+              is_main: photo.is_main
+            },
+            { where: { id: photo.id }, transaction: t }
+          );
+        } else {
+          // Create new photo
+          await Photo.create(
+            {
+              unit_id: id,
+              name: photo.name,
+              url: photo.url,
+              is_main: photo.is_main
+            },
+            { transaction: t }
+          );
+        }
+      }
     }
     
-    await unit.update(req.body);
-    res.json(unit);
+    await t.commit();
+    
+    // Fetch updated unit
+    const updatedUnit = await Unit.findByPk(id, {
+      include: [
+        PropertyAddress, 
+        Tenant,
+        {
+          model: Photo,
+          as: 'photos'
+        }
+      ]
+    });
+    
+    res.json(updatedUnit);
   } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error in PUT /api/units/${req.params.id}:`, error);
-    res.status(400).json({ error: error.message });
+    await t.rollback();
+    console.error('Error updating unit:', error);
+    res.status(500).json({ error: 'Failed to update unit' });
   }
 });
 
@@ -920,6 +1152,61 @@ app.delete('/api/units/:id', async (req, res) => {
   } catch (error) {
     console.error(`[${new Date().toISOString()}] Error in DELETE /api/units/${req.params.id}:`, error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Photo API Endpoints
+app.get('/api/photos', async (req, res) => {
+  try {
+    const photos = await Photo.findAll({
+      include: [
+        { 
+          model: Property,
+          required: false // Make this a LEFT JOIN to handle null property_id
+        },
+        { 
+          model: Unit,
+          required: false // Make this a LEFT JOIN to handle null unit_id
+        }
+      ]
+    });
+    res.json(photos);
+  } catch (error) {
+    console.error('Error fetching photos:', error);
+    res.status(500).json({ error: 'Failed to fetch photos' });
+  }
+});
+
+app.post('/api/photos', async (req, res) => {
+  try {
+    const photo = await Photo.create(req.body);
+    res.status(201).json(photo);
+  } catch (error) {
+    console.error('Error creating photo:', error);
+    res.status(500).json({ error: 'Failed to create photo' });
+  }
+});
+
+app.put('/api/photos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Photo.update(req.body, { where: { id } });
+    const updatedPhoto = await Photo.findByPk(id);
+    res.json(updatedPhoto);
+  } catch (error) {
+    console.error('Error updating photo:', error);
+    res.status(500).json({ error: 'Failed to update photo' });
+  }
+});
+
+app.delete('/api/photos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Photo.destroy({ where: { id } });
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting photo:', error);
+    res.status(500).json({ error: 'Failed to delete photo' });
   }
 });
 
