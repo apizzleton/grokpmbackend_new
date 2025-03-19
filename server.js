@@ -1437,7 +1437,9 @@ app.put('/api/subscriptions/:id/cancel', async (req, res) => {
 // Portfolio endpoints
 app.get('/api/portfolios', async (req, res) => {
   try {
-    const portfolios = await Portfolio.findAll();
+    const portfolios = await Portfolio.findAll({
+      include: [Property]
+    });
     res.json(portfolios);
   } catch (error) {
     console.error('Error fetching portfolios:', error);
