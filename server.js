@@ -296,6 +296,7 @@ const Portfolio = sequelize.define('Portfolio', {
 const PortfolioProperty = sequelize.define('PortfolioProperty', {
   portfolio_id: {
     type: DataTypes.INTEGER,
+    field: 'PortfolioId',  // Map to Sequelize's auto-generated column name
     references: {
       model: 'Portfolios',
       key: 'id'
@@ -303,6 +304,7 @@ const PortfolioProperty = sequelize.define('PortfolioProperty', {
   },
   property_id: {
     type: DataTypes.INTEGER,
+    field: 'PropertyId',  // Map to Sequelize's auto-generated column name
     references: {
       model: 'Properties',
       key: 'id'
@@ -1475,12 +1477,8 @@ app.post('/api/portfolios', async (req, res) => {
     
     // Add properties to the portfolio if provided
     if (property_ids && Array.isArray(property_ids) && property_ids.length > 0) {
-      const portfolioProperties = property_ids.map(property_id => ({
-        portfolio_id: portfolio.id,
-        property_id
-      }));
-      
-      await PortfolioProperty.bulkCreate(portfolioProperties, { transaction: t });
+      // Use the setProperties method instead of manually creating associations
+      await portfolio.setProperties(property_ids, { transaction: t });
     }
     
     await t.commit();
@@ -1494,7 +1492,7 @@ app.post('/api/portfolios', async (req, res) => {
   } catch (error) {
     await t.rollback();
     console.error('Error creating portfolio:', error);
-    res.status(500).json({ error: 'Failed to create portfolio' });
+    res.status(500).json({ error: 'Failed to create portfolio', details: error.message });
   }
 });
 
@@ -1519,20 +1517,7 @@ app.put('/api/portfolios/:id', async (req, res) => {
     // Update portfolio properties if provided
     if (property_ids && Array.isArray(property_ids)) {
       // Remove existing associations
-      await PortfolioProperty.destroy({
-        where: { portfolio_id: id },
-        transaction: t
-      });
-      
-      // Add new associations
-      if (property_ids.length > 0) {
-        const portfolioProperties = property_ids.map(property_id => ({
-          portfolio_id: id,
-          property_id
-        }));
-        
-        await PortfolioProperty.bulkCreate(portfolioProperties, { transaction: t });
-      }
+      await portfolio.setProperties(property_ids, { transaction: t });
     }
     
     await t.commit();
