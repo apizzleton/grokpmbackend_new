@@ -225,6 +225,91 @@ const Photo = sequelize.define('Photo', {
   }
 });
 
+// Define Subscription Plan model
+const SubscriptionPlan = sequelize.define('SubscriptionPlan', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  description: {
+    type: DataTypes.TEXT
+  },
+  price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false
+  },
+  billing_cycle: {
+    type: DataTypes.STRING,
+    defaultValue: 'monthly'
+  },
+  features: {
+    type: DataTypes.JSON
+  }
+});
+
+// Define Subscription model
+const Subscription = sequelize.define('Subscription', {
+  user_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  plan_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'SubscriptionPlans',
+      key: 'id'
+    }
+  },
+  status: {
+    type: DataTypes.STRING,
+    defaultValue: 'active'
+  },
+  start_date: {
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
+  },
+  end_date: {
+    type: DataTypes.DATE
+  },
+  payment_method: {
+    type: DataTypes.STRING
+  }
+});
+
+// Define Portfolio model
+const Portfolio = sequelize.define('Portfolio', {
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  description: {
+    type: DataTypes.TEXT
+  },
+  user_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  }
+});
+
+// Define PortfolioProperty junction model for many-to-many relationship
+const PortfolioProperty = sequelize.define('PortfolioProperty', {
+  portfolio_id: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: 'Portfolios',
+      key: 'id'
+    }
+  },
+  property_id: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: 'Properties',
+      key: 'id'
+    }
+  }
+});
+
 // Define Relationships
 Property.hasMany(PropertyAddress, { foreignKey: 'property_id', as: 'addresses' });
 PropertyAddress.belongsTo(Property, { foreignKey: 'property_id' });
@@ -267,6 +352,14 @@ Photo.belongsTo(Property, { foreignKey: 'property_id' });
 
 Unit.hasMany(Photo, { foreignKey: 'unit_id', as: 'photos' });
 Photo.belongsTo(Unit, { foreignKey: 'unit_id' });
+
+// Subscription relationships
+SubscriptionPlan.hasMany(Subscription, { foreignKey: 'plan_id' });
+Subscription.belongsTo(SubscriptionPlan, { foreignKey: 'plan_id' });
+
+// Portfolio relationships
+Portfolio.belongsToMany(Property, { through: PortfolioProperty });
+Property.belongsToMany(Portfolio, { through: PortfolioProperty });
 
 // API Routes
 app.get('/api/properties', async (req, res) => {
@@ -1210,30 +1303,462 @@ app.delete('/api/photos/:id', async (req, res) => {
   }
 });
 
+// Subscription endpoints
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || 'sk_test_dummy';
+const stripe = require('stripe')(stripeSecretKey);
+
+app.get('/api/subscription/plans', async (req, res) => {
+  try {
+    // Check if we have plans in the database
+    let plans = await SubscriptionPlan.findAll();
+    
+    // If no plans exist, create default plans
+    if (plans.length === 0) {
+      plans = await SubscriptionPlan.bulkCreate([
+        {
+          name: 'Basic Plan',
+          description: 'Perfect for small property managers with up to 5 properties',
+          price: 9.99,
+          billing_cycle: 'monthly',
+          features: JSON.stringify({
+            'property_limit': 5,
+            'unit_limit': 10,
+            'reports': 'basic',
+            'support': 'email'
+          })
+        },
+        {
+          name: 'Pro Plan',
+          description: 'Ideal for growing property management businesses with up to 20 properties',
+          price: 19.99,
+          billing_cycle: 'monthly',
+          features: JSON.stringify({
+            'property_limit': 20,
+            'unit_limit': 50,
+            'reports': 'advanced',
+            'support': 'priority_email'
+          })
+        },
+        {
+          name: 'Enterprise Plan',
+          description: 'Comprehensive solution for large property management companies',
+          price: 49.99,
+          billing_cycle: 'monthly',
+          features: JSON.stringify({
+            'property_limit': 'unlimited',
+            'unit_limit': 'unlimited',
+            'reports': 'premium',
+            'support': '24_7'
+          })
+        }
+      ]);
+    }
+    
+    res.json(plans);
+  } catch (error) {
+    console.error('Error fetching subscription plans:', error);
+    res.status(500).json({ error: 'Failed to load subscription plans' });
+  }
+});
+
+app.post('/api/subscriptions', async (req, res) => {
+  try {
+    const { userId, planId } = req.body;
+    
+    // Validate that the plan exists
+    const plan = await SubscriptionPlan.findByPk(planId);
+    if (!plan) {
+      return res.status(404).json({ error: 'Subscription plan not found' });
+    }
+    
+    // Create a new subscription
+    const subscription = await Subscription.create({
+      user_id: userId || 1, // Default to user 1 if not provided
+      plan_id: planId,
+      status: 'active',
+      start_date: new Date(),
+      payment_method: 'credit_card' // Default payment method
+    });
+    
+    res.json(subscription);
+  } catch (error) {
+    console.error('Error creating subscription:', error);
+    res.status(500).json({ error: 'Failed to create subscription' });
+  }
+});
+
+// Get user's current subscription
+app.get('/api/subscriptions/current/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const subscription = await Subscription.findOne({
+      where: { 
+        user_id: userId,
+        status: 'active'
+      },
+      include: [SubscriptionPlan]
+    });
+    
+    if (!subscription) {
+      return res.status(404).json({ error: 'No active subscription found' });
+    }
+    
+    res.json(subscription);
+  } catch (error) {
+    console.error('Error fetching current subscription:', error);
+    res.status(500).json({ error: 'Failed to fetch current subscription' });
+  }
+});
+
+// Cancel subscription
+app.put('/api/subscriptions/:id/cancel', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const subscription = await Subscription.findByPk(id);
+    if (!subscription) {
+      return res.status(404).json({ error: 'Subscription not found' });
+    }
+    
+    subscription.status = 'cancelled';
+    subscription.end_date = new Date();
+    await subscription.save();
+    
+    res.json(subscription);
+  } catch (error) {
+    console.error('Error cancelling subscription:', error);
+    res.status(500).json({ error: 'Failed to cancel subscription' });
+  }
+});
+
+// Portfolio endpoints
+app.get('/api/portfolios', async (req, res) => {
+  try {
+    const portfolios = await Portfolio.findAll();
+    res.json(portfolios);
+  } catch (error) {
+    console.error('Error fetching portfolios:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolios' });
+  }
+});
+
+app.get('/api/portfolios/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const portfolio = await Portfolio.findByPk(id, {
+      include: [Property]
+    });
+    
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+    
+    res.json(portfolio);
+  } catch (error) {
+    console.error('Error fetching portfolio:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolio' });
+  }
+});
+
+app.post('/api/portfolios', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { name, description, user_id, property_ids } = req.body;
+    
+    // Create the portfolio
+    const portfolio = await Portfolio.create({
+      name,
+      description,
+      user_id: user_id || 1 // Default to user 1 if not provided
+    }, { transaction: t });
+    
+    // Add properties to the portfolio if provided
+    if (property_ids && Array.isArray(property_ids) && property_ids.length > 0) {
+      const portfolioProperties = property_ids.map(property_id => ({
+        portfolio_id: portfolio.id,
+        property_id
+      }));
+      
+      await PortfolioProperty.bulkCreate(portfolioProperties, { transaction: t });
+    }
+    
+    await t.commit();
+    
+    // Fetch the created portfolio with its properties
+    const createdPortfolio = await Portfolio.findByPk(portfolio.id, {
+      include: [Property]
+    });
+    
+    res.status(201).json(createdPortfolio);
+  } catch (error) {
+    await t.rollback();
+    console.error('Error creating portfolio:', error);
+    res.status(500).json({ error: 'Failed to create portfolio' });
+  }
+});
+
+app.put('/api/portfolios/:id', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { name, description, property_ids } = req.body;
+    
+    // Find the portfolio
+    const portfolio = await Portfolio.findByPk(id);
+    if (!portfolio) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+    
+    // Update portfolio details
+    if (name) portfolio.name = name;
+    if (description !== undefined) portfolio.description = description;
+    await portfolio.save({ transaction: t });
+    
+    // Update portfolio properties if provided
+    if (property_ids && Array.isArray(property_ids)) {
+      // Remove existing associations
+      await PortfolioProperty.destroy({
+        where: { portfolio_id: id },
+        transaction: t
+      });
+      
+      // Add new associations
+      if (property_ids.length > 0) {
+        const portfolioProperties = property_ids.map(property_id => ({
+          portfolio_id: id,
+          property_id
+        }));
+        
+        await PortfolioProperty.bulkCreate(portfolioProperties, { transaction: t });
+      }
+    }
+    
+    await t.commit();
+    
+    // Fetch the updated portfolio with its properties
+    const updatedPortfolio = await Portfolio.findByPk(id, {
+      include: [Property]
+    });
+    
+    res.json(updatedPortfolio);
+  } catch (error) {
+    await t.rollback();
+    console.error('Error updating portfolio:', error);
+    res.status(500).json({ error: 'Failed to update portfolio' });
+  }
+});
+
+app.delete('/api/portfolios/:id', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    
+    // Delete portfolio properties first
+    await PortfolioProperty.destroy({
+      where: { portfolio_id: id },
+      transaction: t
+    });
+    
+    // Delete the portfolio
+    const deleted = await Portfolio.destroy({
+      where: { id },
+      transaction: t
+    });
+    
+    if (deleted === 0) {
+      await t.rollback();
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+    
+    await t.commit();
+    res.status(204).send();
+  } catch (error) {
+    await t.rollback();
+    console.error('Error deleting portfolio:', error);
+    res.status(500).json({ error: 'Failed to delete portfolio' });
+  }
+});
+
+// Add a property to a portfolio
+app.post('/api/portfolios/:portfolioId/properties/:propertyId', async (req, res) => {
+  try {
+    const { portfolioId, propertyId } = req.params;
+    
+    // Check if portfolio exists
+    const portfolio = await Portfolio.findByPk(portfolioId);
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+    
+    // Check if property exists
+    const property = await Property.findByPk(propertyId);
+    if (!property) {
+      return res.status(404).json({ error: 'Property not found' });
+    }
+    
+    // Check if association already exists
+    const existingAssociation = await PortfolioProperty.findOne({
+      where: {
+        portfolio_id: portfolioId,
+        property_id: propertyId
+      }
+    });
+    
+    if (existingAssociation) {
+      return res.status(409).json({ error: 'Property already in portfolio' });
+    }
+    
+    // Create the association
+    await PortfolioProperty.create({
+      portfolio_id: portfolioId,
+      property_id: propertyId
+    });
+    
+    res.status(201).json({ message: 'Property added to portfolio' });
+  } catch (error) {
+    console.error('Error adding property to portfolio:', error);
+    res.status(500).json({ error: 'Failed to add property to portfolio' });
+  }
+});
+
+// Remove a property from a portfolio
+app.delete('/api/portfolios/:portfolioId/properties/:propertyId', async (req, res) => {
+  try {
+    const { portfolioId, propertyId } = req.params;
+    
+    // Delete the association
+    const deleted = await PortfolioProperty.destroy({
+      where: {
+        portfolio_id: portfolioId,
+        property_id: propertyId
+      }
+    });
+    
+    if (deleted === 0) {
+      return res.status(404).json({ error: 'Property not found in portfolio' });
+    }
+    
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error removing property from portfolio:', error);
+    res.status(500).json({ error: 'Failed to remove property from portfolio' });
+  }
+});
+
+// Get all properties in a portfolio
+app.get('/api/portfolios/:id/properties', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the portfolio with its properties
+    const portfolio = await Portfolio.findByPk(id, {
+      include: [{
+        model: Property,
+        include: [
+          { model: PropertyAddress, as: 'addresses' },
+          { model: Photo, as: 'photos' }
+        ]
+      }]
+    });
+    
+    if (!portfolio) {
+      return res.status(404).json({ error: 'Portfolio not found' });
+    }
+    
+    res.json(portfolio.Properties);
+  } catch (error) {
+    console.error('Error fetching portfolio properties:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolio properties' });
+  }
+});
+
+// Get portfolios for a specific user
+app.get('/api/users/:userId/portfolios', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const portfolios = await Portfolio.findAll({
+      where: { user_id: userId },
+      include: [Property]
+    });
+    
+    res.json(portfolios);
+  } catch (error) {
+    console.error('Error fetching user portfolios:', error);
+    res.status(500).json({ error: 'Failed to fetch user portfolios' });
+  }
+});
+
 // Database Sync and Seed Function
 const syncModels = async () => {
   try {
-    await sequelize.authenticate();
-    console.log(`[${new Date().toISOString()}] Database connection established successfully`);
-
-    await sequelize.sync({ alter: true });
-    console.log(`[${new Date().toISOString()}] Database synced successfully`);
+    console.log('Syncing database models...');
     
-    // Add default account types if they don't exist
-    const accountTypes = ['Income', 'Expense', 'Asset', 'Liability', 'Equity', 'Bank'];
-    for (const typeName of accountTypes) {
-      const exists = await AccountType.findOne({ where: { name: typeName } });
-      if (!exists) {
-        await AccountType.create({ 
-          name: typeName, 
-          description: `${typeName} account for double-entry accounting` 
-        });
-        console.log(`Created account type: ${typeName}`);
-      }
+    // Force sync in development (drops tables if they exist)
+    // In production, you would want to use migrations instead
+    await sequelize.sync({ alter: true });
+    
+    console.log('Database synchronized successfully.');
+    
+    // Seed data for testing if needed
+    const accountTypeCount = await AccountType.count();
+    if (accountTypeCount === 0) {
+      console.log('Seeding account types...');
+      await AccountType.bulkCreate([
+        { name: 'Operating', description: 'For day-to-day operations' },
+        { name: 'Reserve', description: 'For long-term savings and major repairs' },
+        { name: 'Escrow', description: 'For holding funds in trust' }
+      ]);
     }
+    
+    // Seed subscription plans if they don't exist
+    const planCount = await SubscriptionPlan.count();
+    if (planCount === 0) {
+      console.log('Seeding subscription plans...');
+      await SubscriptionPlan.bulkCreate([
+        {
+          name: 'Basic Plan',
+          description: 'Perfect for small property managers with up to 5 properties',
+          price: 9.99,
+          billing_cycle: 'monthly',
+          features: JSON.stringify({
+            'property_limit': 5,
+            'unit_limit': 10,
+            'reports': 'basic',
+            'support': 'email'
+          })
+        },
+        {
+          name: 'Pro Plan',
+          description: 'Ideal for growing property management businesses with up to 20 properties',
+          price: 19.99,
+          billing_cycle: 'monthly',
+          features: JSON.stringify({
+            'property_limit': 20,
+            'unit_limit': 50,
+            'reports': 'advanced',
+            'support': 'priority_email'
+          })
+        },
+        {
+          name: 'Enterprise Plan',
+          description: 'Comprehensive solution for large property management companies',
+          price: 49.99,
+          billing_cycle: 'monthly',
+          features: JSON.stringify({
+            'property_limit': 'unlimited',
+            'unit_limit': 'unlimited',
+            'reports': 'premium',
+            'support': '24_7'
+          })
+        }
+      ]);
+    }
+    
   } catch (error) {
-    console.error('Database sync error:', error);
-    process.exit(1);
+    console.error('Database synchronization error:', error);
   }
 };
 
